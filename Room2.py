@@ -20,19 +20,34 @@ class Room2(GridWorld):
         self.training_stats = None
         self.show_policy_arrows = False
         self.is_training = False
-        self.restrict_movement = False  # Optional movement restriction
         
         # Agent and control
         self.agent = None
         self.done = False
         self.next_room = False
         
+        # AI play attributes
+        self.ai_playing = False
+        self.ai_step_count = 0
+        self.ai_max_steps = 200
+        self.ai_total_slips = 0
+        self.ai_step_timer = 0
+        self.ai_step_delay = 30  # frames (about 0.5 seconds at 60 FPS)
+        
+        # Distance-based reward system settings
+        self.debug_rewards = False  # Set to True to see detailed reward breakdown
+        
         print(f"🧠 Room 2 initialized for SARSA learning:")
         print(f"   Environment: 10x10 grid with slippery cells")
         print(f"   Goal position: {self.gems[0]} (ROOM 2 SPECIFIC)")
         print(f"   Slippery cells: {self.slippery_cells}")
         print(f"   Obstacles: {self.obstacles}")
-        print(f"   🆓 Movement: FREE (no restrictions until training + 'M' key)")
+        print(f"   🆓 Movement: Always FREE (consistent training and playing experience)")
+        print(f"   🎯 NEW: Enhanced reward system with distance-based incentives!")
+        print(f"      • -1 per step (minimize total steps)")
+        print(f"      • +0.5 per distance unit closer to goal (encourage progress)")
+        print(f"      • -0.2 per distance unit away from goal (discourage retreat)")
+        print(f"      • +100 for reaching goal")
         print(f"   🎓 Ready for model-free learning!")
 
     def _setup_sarsa_environment(self):
@@ -97,6 +112,9 @@ class Room2(GridWorld):
         
         self.is_training = True
         
+        # Reset arrow logging flag for new training session
+        self._arrows_drawn_logged = False
+        
         # Progress callback for UI updates
         def progress_callback(episode, reward, steps, epsilon):
             if episode % 10 == 0:  # Update every 10 episodes
@@ -122,9 +140,9 @@ class Room2(GridWorld):
             print("🔍 Extracting complete Room 2 policy...")
             self._extract_complete_policy()
             
-            # Automatically show policy arrows after training
-            self.show_policy_arrows = True
-            print("✨ Room 2 Policy arrows automatically enabled after training!")
+            # Policy arrows are optional - use 'P' key to toggle if desired
+            self.show_policy_arrows = False
+            print("💡 Room 2 Policy learned! Press 'P' to toggle policy arrows if needed")
             
             # Analyze learned policy
             print("📊 Analyzing Room 2 learned policy...")
@@ -319,18 +337,104 @@ class Room2(GridWorld):
 
     def play(self):
         """
-        Let the agent play using the learned SARSA policy.
-        This method is called by the UI Play button.
+        Let the AI play with free movement (like during training).
+        No longer requires a trained policy - AI moves freely.
         """
-        if self.policy is None:
-            print("❌ No Room 2 policy learned! Please train using SARSA first.")
-            return
+        print("🤖 Room 2 AI will play with free movement...")
+        print("   AI uses goal-directed movement with exploration (like during training)")
+        print("   No longer restricted to policy arrows - consistent with training experience!")
         
-        print("🤖 Room 2 AI will play using learned SARSA policy...")
-        print("   Watch the agent follow the learned policy arrows in Room 2!")
+        # Initialize AI play state
+        self.ai_playing = True
+        self.ai_step_count = 0
+        self.ai_max_steps = 200  # Maximum steps before giving up
+        self.ai_total_slips = 0
+        self.ai_step_timer = 0
+        self.ai_step_delay = 30  # frames (about 0.5 seconds at 60 FPS)
         
         # Reset to starting position for AI play
         self.reset()
+
+    def _ai_play_step(self):
+        """Execute one step of AI play with free movement (like during training)."""
+        if not self.ai_playing:
+            return
+        
+        try:
+            current_state = self.agent_pos
+            
+            # AI plays with free movement - chooses actions freely like during training
+            # This ensures consistency between training and playing environments
+            available_actions = ['up', 'down', 'left', 'right']
+            
+            # Simple strategy: move toward goal with some randomness (like epsilon-greedy)
+            goal_pos = self.gems[0] if self.gems else (8, 8)
+            current_x, current_y = current_state
+            goal_x, goal_y = goal_pos
+            
+            # Calculate best directions toward goal
+            best_actions = []
+            if goal_x > current_x and current_x < self.size - 1:  # Can go right
+                best_actions.append('right')
+            elif goal_x < current_x and current_x > 0:  # Can go left
+                best_actions.append('left')
+            
+            if goal_y > current_y and current_y < self.size - 1:  # Can go down
+                best_actions.append('down')
+            elif goal_y < current_y and current_y > 0:  # Can go up
+                best_actions.append('up')
+            
+            # If no best actions (already at goal row/column), try any valid action
+            if not best_actions:
+                if current_x > 0:
+                    best_actions.append('left')
+                if current_x < self.size - 1:
+                    best_actions.append('right')
+                if current_y > 0:
+                    best_actions.append('up')
+                if current_y < self.size - 1:
+                    best_actions.append('down')
+            
+            # Choose action with some exploration (like during training)
+            import random
+            if random.random() < 0.3:  # 30% exploration
+                action = random.choice(available_actions)
+                print(f"🎲 Room 2 AI at {current_state} exploring: {action}")
+            else:
+                action = random.choice(best_actions) if best_actions else random.choice(available_actions)
+                print(f"🎯 Room 2 AI at {current_state} moving toward goal: {action}")
+            
+            # Take the chosen action (free movement)
+            next_state, reward, done, info = self.step(action)
+            
+            # Check if action slipped
+            if info.get('slipped', False):
+                self.ai_total_slips += 1
+                actual_action = info.get('actual_action', action)
+                print(f"   💫 SLIPPED! Intended {action}, actually moved {actual_action}")
+                print(f"   📍 Ended up at {next_state}, reward: {reward}")
+            else:
+                print(f"   ✅ Moved successfully to {next_state}, reward: {reward}")
+            
+            if done:
+                if next_state in self.gems:
+                    print(f"🎉 Room 2 AI reached the goal in {self.ai_step_count + 1} steps!")
+                    print(f"   Total slips during episode: {self.ai_total_slips}")
+                    print(f"   Final reward: {reward}")
+                self.ai_playing = False
+                return
+            
+            self.ai_step_count += 1
+            
+            if self.ai_step_count >= self.ai_max_steps:
+                print(f"⏰ Room 2 AI didn't reach goal in {self.ai_max_steps} steps")
+                print(f"   Total slips during episode: {self.ai_total_slips}")
+                self.ai_playing = False
+                return
+                
+        except Exception as e:
+            print(f"❌ Room 2 AI play error: {e}")
+            self.ai_playing = False
 
     def manual(self):
         """
@@ -338,59 +442,108 @@ class Room2(GridWorld):
         """
         print("🕹️  Room 2 Manual control activated!")
         print("   Use arrow keys to explore and learn the Room 2 environment")
-        if self.restrict_movement and self.policy:
-            print("   🚫 Movement restricted to policy arrows")
-        else:
-            print("   🆓 Free movement enabled")
+        print("   🆓 Full free movement enabled - arrows show learned policy for reference")
             
         self.reset()
         self.done = False
+        self.ai_playing = False
 
     def stop(self):
-        """Stop training or episode."""
+        """Stop training or episode - but keep the environment open."""
         print("🛑 Stopping Room 2 current operation...")
-        self.done = True
-        self.is_training = False
+        if self.is_training:
+            print("   Stopping training process...")
+            self.is_training = False
+        elif self.ai_playing:
+            print("   Stopping AI play...")
+            self.ai_playing = False
+        else:
+            print("   No active training or AI play to stop.")
+        # Don't set self.done = True - this would close the entire room!
+        # Keep the environment open so user can interact with trained agent
 
     def step(self, action):
         """
-        Override step to optionally implement policy-restricted movement.
-        In Room2, movement is FREE by default - restriction only when explicitly enabled.
+        Enhanced step method with distance-based reward system.
+        
+        Room 2 Reward System:
+        - Base step penalty: -1 per step
+        - Slipping penalty: additional -2 
+        - Goal reward: +100 for reaching destination
+        - NEW: Distance-based progress reward: +0.5 for getting closer, -0.2 for moving away
+        
+        This prevents the agent from staying in place to avoid negative rewards.
         """
+        # Store current position and distance to goal before moving
         current_state = self.agent_pos
+        goal_position = self.gems[0] if self.gems else (8, 8)  # Room 2 goal at (8,8)
+        current_distance = self._calculate_manhattan_distance(current_state, goal_position)
         
-        # Only restrict movement if ALL conditions are met:
-        # 1. Policy exists (after training)
-        # 2. Not currently training
-        # 3. Movement restriction is explicitly enabled (user pressed 'M')
-        if (self.policy is not None and 
-            not self.is_training and 
-            hasattr(self, 'restrict_movement') and 
-            self.restrict_movement):
+        # Room 2: Always allow free movement (no policy restrictions)
+        # This ensures consistency between training and playing environments
+        
+        # Execute the movement using parent's step method
+        next_state, base_reward, done, info = super().step(action)
+        
+        # Calculate distance-based reward modification
+        if not done:  # Only apply distance reward if game isn't over
+            new_distance = self._calculate_manhattan_distance(next_state, goal_position)
+            distance_change = current_distance - new_distance  # Positive if got closer
             
-            policy_action = self.policy.get(current_state)
-            if policy_action is not None and action != policy_action:
-                print(f"🚫 Room 2 Movement blocked! Policy suggests {policy_action}, attempted {action}")
-                return current_state, -0.5, False, {"blocked": True, "policy_action": policy_action}
+            # Distance-based reward: encourage progress toward goal
+            if distance_change > 0:
+                # Got closer to goal - positive reinforcement
+                distance_reward = 0.5 * distance_change
+                print(f"📈 Room 2: Moved closer to goal! Distance reward: +{distance_reward:.1f}")
+            elif distance_change < 0:
+                # Moved away from goal - small penalty
+                distance_reward = 0.2 * distance_change  # This will be negative
+                print(f"📉 Room 2: Moved away from goal. Distance penalty: {distance_reward:.1f}")
+            else:
+                # Same distance (moved parallel or stayed in place)
+                distance_reward = 0
+            
+            # Combine base reward with distance-based reward
+            total_reward = base_reward + distance_reward
+            
+            # Debug output for reward components
+            if hasattr(self, 'debug_rewards') and self.debug_rewards:
+                print(f"🧮 Room 2 Reward breakdown:")
+                print(f"   Base reward: {base_reward}")
+                print(f"   Distance reward: {distance_reward:.1f}")  
+                print(f"   Total reward: {total_reward:.1f}")
+                print(f"   Distance: {current_distance} → {new_distance}")
+        else:
+            # Game is done (reached goal or hit obstacle) - use base reward only
+            total_reward = base_reward
+            if next_state in self.gems:
+                print(f"🎯 Room 2: Reached goal! Final reward: {total_reward}")
         
-        # Default: Allow free movement (standard SARSA behavior)
-        return super().step(action)
+        return next_state, total_reward, done, info
+    
+    def _calculate_manhattan_distance(self, pos1, pos2):
+        """Calculate Manhattan distance between two positions."""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
     def render(self, screen):
         """
-        Enhanced render method with automatic policy visualization.
+        Render the environment without automatic policy arrows.
         """
         try:
             # Draw base environment
             super().render(screen)
             
-            # Draw policy arrows if enabled and policy exists
+            # Only draw policy arrows if explicitly enabled by user (P key)
             if self.show_policy_arrows and self.policy is not None:
                 self.draw_policy_arrows(screen)
             
             # Draw training indicator
             if self.is_training:
                 self._draw_training_indicator(screen)
+            
+            # Draw AI play indicator
+            if self.ai_playing:
+                self._draw_ai_play_indicator(screen)
                 
         except Exception as e:
             print(f"❌ Room 2 Render error: {e}")
@@ -433,7 +586,10 @@ class Room2(GridWorld):
             if missing_arrows and arrows_drawn == 0:  # Only report on first draw
                 print(f"⚠️  {len(missing_arrows)} cells missing arrows: {missing_arrows}")
             
-            print(f"✅ Drew {arrows_drawn} arrows in Room 2 (skipped {len(self.obstacles)} obstacles + {len(self.gems)} goals)")
+            # Only print arrow count once (not every frame)
+            if not hasattr(self, '_arrows_drawn_logged') or not self._arrows_drawn_logged:
+                print(f"✅ Drew {arrows_drawn} arrows in Room 2 (skipped {len(self.obstacles)} obstacles + {len(self.gems)} goals)")
+                self._arrows_drawn_logged = True
                 
         except Exception as e:
             print(f"❌ Room 2 Arrow drawing error: {e}")
@@ -536,6 +692,24 @@ class Room2(GridWorld):
         except Exception as e:
             print(f"❌ Error drawing Room 2 training indicator: {e}")
 
+    def _draw_ai_play_indicator(self, screen):
+        """Draw indicator when AI is playing."""
+        try:
+            font = pygame.font.Font(None, 36)
+            text = font.render("ROOM 2 AI PLAYING...", True, (0, 255, 0))
+            screen.blit(text, (self.game_width + 10, 90))
+            
+            # Show step count
+            step_font = pygame.font.Font(None, 24)
+            step_text = step_font.render(f"Step: {self.ai_step_count}/{self.ai_max_steps}", True, (0, 200, 0))
+            screen.blit(step_text, (self.game_width + 10, 120))
+            
+            # Show slip count
+            slip_text = step_font.render(f"Slips: {self.ai_total_slips}", True, (0, 200, 0))
+            screen.blit(slip_text, (self.game_width + 10, 140))
+        except Exception as e:
+            print(f"❌ Error drawing Room 2 AI play indicator: {e}")
+
     def run(self):
         """
         Simple run method without threads - integrated pygame and tkinter.
@@ -558,9 +732,11 @@ class Room2(GridWorld):
             print("🧠 Room 2 - SARSA Learning Environment")
             print("📋 Use Train button to start SARSA learning")
             print("🎮 Use arrow keys for manual control (FREE MOVEMENT)")
-            print("⌨️  Press 'P' to toggle policy arrows (after training)")
-            print("⌨️  Press 'M' to toggle movement restriction (after training)")
-            print("🆓 Movement is FREE until you train and press 'M'")
+            print("🤖 Use Play button for AI demonstration (FREE MOVEMENT)")
+            print("⌨️  Press 'P' to toggle policy arrows (optional visualization)")
+            print("⌨️  Press 'D' to toggle debug rewards (see distance-based rewards)")
+            print("🆓 All movement is FREE - training and playing use same mechanics")
+            print("🎯 NEW: Distance-based rewards encourage progress toward goal!")
             print("🚪 Use Next Room button when ready to continue")
             
             # Simple integrated game loop
@@ -600,16 +776,13 @@ class Room2(GridWorld):
                                 else:
                                     print("❌ No Room 2 policy learned! Train first.")
                                 continue
-                            elif event.key == pygame.K_m:
-                                # Toggle movement restriction
-                                if self.policy is not None:
-                                    self.restrict_movement = not self.restrict_movement
-                                    if self.restrict_movement:
-                                        print("🚫 Room 2 Movement restriction enabled - follow arrows only!")
-                                    else:
-                                        print("🆓 Room 2 Free movement enabled")
+                            elif event.key == pygame.K_d:
+                                # Toggle debug rewards
+                                self.debug_rewards = not self.debug_rewards
+                                if self.debug_rewards:
+                                    print("🐛 Room 2 Debug rewards enabled - you'll see detailed reward breakdown")
                                 else:
-                                    print("❌ No Room 2 policy learned! Train first.")
+                                    print("🔇 Room 2 Debug rewards disabled")
                                 continue
                             elif event.key == pygame.K_n:
                                 # Debug: Next room with keyboard
@@ -627,12 +800,19 @@ class Room2(GridWorld):
                                 if done:
                                     print("🎉 Congratulations! Manual goal reached in Room 2!")
                                     print(f"Reward: {reward}")
-                                    print("Press 'R' to reset, 'P' to toggle arrows, 'M' to toggle movement restriction, 'N' for next room")
+                                    print("Press 'R' to reset, 'P' to toggle arrows, 'D' to toggle debug rewards, 'N' for next room")
                     
                     # Check if we should move to next room
                     if self.next_room:
                         print("🚪 Next room flag detected!")
                         break
+                    
+                    # Handle AI play step timing
+                    if self.ai_playing:
+                        self.ai_step_timer += 1
+                        if self.ai_step_timer >= self.ai_step_delay:
+                            self.ai_step_timer = 0
+                            self._ai_play_step()
                     
                     # Render the environment
                     self.render(screen)
